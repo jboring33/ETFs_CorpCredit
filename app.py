@@ -4,17 +4,24 @@ import pandas as pd
 import plotly.express as px
 from datetime import datetime, timedelta
 
-# 1. Page Configuration (MUST be the first Streamlit command)
+# ==============================================================================
+# 1. PAGE CONFIGURATION - MUST BE THE VERY FIRST STREAMLIT CALL
+# ==============================================================================
 st.set_page_config(
     page_title="High Yield & Fixed Income ETF Monitor",
     page_layout="wide",
     initial_sidebar_state="expanded"
 )
 
+# ==============================================================================
+# 2. APP TITLE & HEADER
+# ==============================================================================
 st.title("📊 High Yield & Fixed Income ETF Monitor")
 st.caption("Real-time pricing, total returns, and risk metrics across short-duration & high-yield ETFs.")
 
-# 2. Sidebar Controls
+# ==============================================================================
+# 3. SIDEBAR CONTROLS
+# ==============================================================================
 st.sidebar.header("Monitor Settings")
 
 DEFAULT_TICKERS = ["SCYB", "HYG", "USHY", "JAAA", "JPST", "SGOV"]
@@ -33,48 +40,63 @@ timeframe = st.sidebar.selectbox(
 days_map = {"1M": 30, "3M": 90, "6M": 180, "YTD": 275, "1Y": 365, "2Y": 730, "Max": 1825}
 start_date = datetime.now() - timedelta(days=days_map[timeframe])
 
-# 3. Data Fetching Functions (Updated to avoid pickle errors with yfinance Ticker objects)
+# ==============================================================================
+# 4. CACHED DATA FETCHING
+# ==============================================================================
 @st.cache_data(ttl=900)
 def fetch_etf_data(tickers, start):
     hist_dict = {}
     info_list = []
     
     for ticker in tickers:
-        t = yf.Ticker(ticker)
-        # Fetch history as pure DataFrame
-        hist = t.history(start=start)
-        if not hist.empty:
-            hist_dict[ticker] = hist
-        
-        # Safely extract scalar metadata
-        inf = t.info
-        trailing_yield = inf.get("trailingAnnualDividendYield")
-        expense_ratio = inf.get("netExpenseRatio")
-        
-        info_list.append({
-            "Ticker": ticker,
-            "Name": inf.get("shortName", ticker),
-            "Price ($)": inf.get("regularMarketPrice") or inf.get("previousClose") or (hist["Close"].iloc[-1] if not hist.empty else None),
-            "Trailing Yield (%)": round(trailing_yield * 100, 2) if trailing_yield is not None else "N/A",
-            "Expense Ratio (%)": round(expense_ratio * 100, 2) if expense_ratio is not None else "N/A",
-            "52W High": inf.get("fiftyTwoWeekHigh"),
-            "52W Low": inf.get("fiftyTwoWeekLow")
-        })
-        
+        try:
+            t = yf.Ticker(ticker)
+            hist = t.history(start=start)
+            if not hist.empty:
+                hist_dict[ticker] = hist
+            
+            # Safely fetch info metadata
+            inf = t.info or {}
+            trailing_yield = inf.get("trailingAnnualDividendYield")
+            expense_ratio = inf.get("netExpenseRatio")
+            
+            latest_price = (
+                inf.get("regularMarketPrice") 
+                or inf.get("previousClose") 
+                or (hist["Close"].iloc[-1] if not hist.empty else "N/A")
+            )
+
+            info_list.append({
+                "Ticker": ticker,
+                "Name": inf.get("shortName", ticker),
+                "Price ($)": f"${latest_price:.2f}" if isinstance(latest_price, (int, float)) else latest_price,
+                "Trailing Yield (%)": f"{round(trailing_yield * 100, 2)}%" if trailing_yield is not None else "N/A",
+                "Expense Ratio (%)": f"{round(expense_ratio * 100, 2)}%" if expense_ratio is not None else "N/A",
+                "52W High": f"${inf.get('fiftyTwoWeekHigh'):.2f}" if inf.get('fiftyTwoWeekHigh') else "N/A",
+                "52W Low": f"${inf.get('fiftyTwoWeekLow'):.2f}" if inf.get('fiftyTwoWeekLow') else "N/A"
+            })
+        except Exception as e:
+            st.warning(f"Could not load data for {ticker}: {str(e)}")
+
     return hist_dict, pd.DataFrame(info_list)
 
 if not selected_tickers:
     st.warning("Please select at least one ETF from the sidebar.")
     st.stop()
 
-with st.spinner("Fetching ETF market data..."):
+with st.spinner("Fetching market data from Yahoo Finance..."):
     hist_data, summary_df = fetch_etf_data(tuple(selected_tickers), start_date)
 
-# 4. Market Overview Table
+# ==============================================================================
+# 5. MARKET OVERVIEW
+# ==============================================================================
 st.subheader("Current Market Overview")
-st.dataframe(summary_df.set_index("Ticker"), use_container_width=True)
+if not summary_df.empty:
+    st.dataframe(summary_df.set_index("Ticker"), use_container_width=True)
 
-# 5. Comparative Performance Chart
+# ==============================================================================
+# 6. PERFORMANCE CHARTS
+# ==============================================================================
 st.markdown("---")
 st.subheader("Price Performance vs. Normalized Growth")
 
@@ -111,7 +133,9 @@ with tab2:
         fig_price.update_layout(hovermode="x unified")
         st.plotly_chart(fig_price, use_container_width=True)
 
-# 6. Risk & Drawdown Analysis
+# ==============================================================================
+# 7. RISK & DRAWDOWN ANALYSIS
+# ==============================================================================
 st.markdown("---")
 st.subheader("Risk & Volatility Analysis")
 
@@ -120,11 +144,10 @@ focus_ticker = st.selectbox("Select Focus Ticker for Risk Metrics:", options=sel
 if focus_ticker in hist_data and not hist_data[focus_ticker].empty:
     focus_df = hist_data[focus_ticker].copy()
     
-    # Calculate Max Drawdown
+    # Calculate Drawdown
     focus_df["Rolling Max"] = focus_df["Close"].cummax()
     focus_df["Drawdown"] = (focus_df["Close"] - focus_df["Rolling Max"]) / focus_df["Rolling Max"] * 100
     
-    # FIXED: Corrected st.st.columns to st.columns
     col1, col2, col3 = st.columns(3)
     col1.metric("Current Price", f"${focus_df['Close'].iloc[-1]:.2f}")
     col2.metric("Max Drawdown (Period)", f"{focus_df['Drawdown'].min():.2f}%")
