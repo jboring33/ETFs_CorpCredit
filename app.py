@@ -69,7 +69,7 @@ def fetch_etf_data(tickers, start):
                 "Name": inf.get("shortName", ticker),
                 "Price ($)": f"${latest_price:.2f}" if isinstance(latest_price, (int, float)) else latest_price,
                 "Trailing Yield (%)": f"{round(trailing_yield * 100, 2)}%" if trailing_yield is not None else "N/A",
-                "Expense Ratio (%)": f"{round(expense_ratio * 100, 2)}%" if expense_ratio is not None else "N/A",
+                "Expense Ratio (%)": f"{round(expense_ratio, 2)}%" if expense_ratio is not None else "N/A",
                 "52W High": f"${inf.get('fiftyTwoWeekHigh'):.2f}" if inf.get('fiftyTwoWeekHigh') else "N/A",
                 "52W Low": f"${inf.get('fiftyTwoWeekLow'):.2f}" if inf.get('fiftyTwoWeekLow') else "N/A"
             })
