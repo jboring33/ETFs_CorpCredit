@@ -1,13 +1,12 @@
 import streamlit as st
 
-# MUST BE THE ABSOLUTE FIRST STREAMLIT CALL IN THE MAIN SCRIPT FILE
+# Fixed argument: layout="wide" instead of page_layout="wide"
 st.set_page_config(
     page_title="High Yield & Fixed Income ETF Monitor",
-    page_layout="wide",
+    layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# Heavy third-party imports placed AFTER set_page_config
 import yfinance as yf
 import pandas as pd
 import plotly.express as px
